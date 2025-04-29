@@ -16,6 +16,25 @@ pipeline {
     }
 
     stages {
+        stage('Install Terraform') {
+            steps {
+                script {
+                    // Check if Terraform is installed, if not, install it
+                    def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
+                    if (terraformInstalled != 0) {
+                        echo 'Terraform is not installed, installing it now.'
+                        // Install Terraform (Assuming Ubuntu or Debian based system)
+                        sh 'curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -'
+                        sh 'sudo apt-add-repository "deb https://apt.releases.hashicorp.com $(lsb_release -cs) main"'
+                        sh 'sudo apt-get update'
+                        sh 'sudo apt-get install terraform'
+                    } else {
+                        echo 'Terraform is already installed.'
+                    }
+                }
+            }
+        }
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
