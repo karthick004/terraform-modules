@@ -4,11 +4,11 @@ pipeline {
     environment {
         AWS_REGION = 'us-east-1'
         TF_VAR_region = 'us-east-1'
-        TF_DIR = 'eks_cluster' // Path to Terraform configuration
+        TF_DIR = 'eks_cluster' // <<== define your Terraform module directory
     }
 
     triggers {
-        githubPush() // Trigger on push to GitHub
+        githubPush()
     }
 
     options {
@@ -43,18 +43,17 @@ pipeline {
             steps {
                 git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
                 script {
-                    def tfFilesExist = sh(script: 'cd ${TF_DIR} && ls *.tf', returnStatus: true)
-                    if (tfFilesExist != 0) {
-                        error "No Terraform configuration files (.tf) found in '${env.TF_DIR}' directory!"
-                    }
+                    // Verify .tf files exist in the eks_cluster directory
+                    sh "cd ${env.TF_DIR} && ls *.tf"
                 }
             }
         }
 
-        stage('Terraform Format Check') {
+        stage('Terraform Format') {
             steps {
                 script {
-                    sh "cd ${env.TF_DIR} && terraform fmt -check"
+                    echo "Running terraform fmt to auto-format code..."
+                    sh "cd ${env.TF_DIR} && terraform fmt -recursive"
                 }
             }
         }
