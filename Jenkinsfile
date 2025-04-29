@@ -19,7 +19,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/YOUR_ORG/YOUR_REPO.git'
+                git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
             }
         }
 
