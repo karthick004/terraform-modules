@@ -41,7 +41,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
+                git branch: 'main', url: 'https://github.com/karthick004/cluster-module.git'
                 script {
                     // Verify .tf files exist in the eks_cluster directory
                     sh "cd ${env.TF_DIR} && ls *.tf"
