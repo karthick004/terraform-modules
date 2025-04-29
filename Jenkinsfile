@@ -43,6 +43,13 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
+                script {
+                    // Verify if any .tf files are in the repository
+                    def tfFilesExist = sh(script: 'ls *.tf', returnStatus: true)
+                    if (tfFilesExist != 0) {
+                        error 'No Terraform configuration files (.tf) found in the repository!'
+                    }
+                }
             }
         }
 
@@ -59,7 +66,7 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     script {
-                        // Ensure you're in the correct directory
+                        // Ensure you're in the correct directory (if required)
                         sh 'terraform init'
                     }
                 }
