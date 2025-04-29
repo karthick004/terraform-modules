@@ -7,11 +7,11 @@ pipeline {
     }
 
     triggers {
-        githubPush()
+        githubPush() // Trigger on push to GitHub
     }
 
     options {
-        timestamps()
+        timestamps() // Add timestamps to logs
         ansiColor('xterm') // Ensure AnsiColor plugin is installed on Jenkins
     }
 
@@ -19,17 +19,19 @@ pipeline {
         stage('Install Terraform') {
             steps {
                 script {
-                    // Check if Terraform is installed, if not, install it
+                    // Check if Terraform is installed
                     def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
                     if (terraformInstalled != 0) {
                         echo 'Terraform is not installed, installing it now.'
-                        // Install Terraform manually (no sudo)
+                        // Install Terraform manually without sudo
                         sh '''
                             TERRAFORM_VERSION="1.5.0"
                             curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
                             unzip terraform.zip
-                            mv terraform /usr/local/bin/terraform
-                            terraform -version
+                            mv terraform $HOME/.local/bin/terraform
+                            # Make sure terraform is installed
+                            echo "Terraform installed to: $HOME/.local/bin/terraform"
+                            $HOME/.local/bin/terraform -version
                         '''
                     } else {
                         echo 'Terraform is already installed.'
@@ -46,14 +48,20 @@ pipeline {
 
         stage('Terraform Format Check') {
             steps {
-                sh 'terraform fmt -check'
+                script {
+                    // Check if the Terraform configuration exists
+                    sh 'terraform fmt -check'
+                }
             }
         }
 
         stage('Terraform Init') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh 'terraform init'
+                    script {
+                        // Ensure you're in the correct directory
+                        sh 'terraform init'
+                    }
                 }
             }
         }
@@ -61,7 +69,9 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh 'terraform validate'
+                    script {
+                        sh 'terraform validate'
+                    }
                 }
             }
         }
@@ -69,7 +79,9 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh 'terraform plan -out=tfplan'
+                    script {
+                        sh 'terraform plan -out=tfplan'
+                    }
                 }
             }
         }
@@ -78,7 +90,9 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     input message: 'Do you want to apply the changes?', ok: 'Apply Now'
-                    sh 'terraform apply tfplan'
+                    script {
+                        sh 'terraform apply tfplan'
+                    }
                 }
             }
         }
