@@ -19,6 +19,8 @@ pipeline {
         stage('Install Terraform') {
             steps {
                 script {
+                       apt-get update
+                       apt-get install -y 
                     // Check if Terraform is installed, if not, install it
                     def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
                     if (terraformInstalled != 0) {
