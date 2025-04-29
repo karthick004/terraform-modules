@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        TF_VAR_region = 'us-east-1'  // Pass to Terraform if your modules use this
+        TF_VAR_region = 'us-east-1'
     }
 
     triggers {
@@ -12,21 +12,23 @@ pipeline {
 
     options {
         timestamps()
-        ansiColor('xterm')
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
+                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                    git branch: 'main', url: 'https://github.com/karthick004/terraform-modules.git'
+                }
             }
         }
 
         stage('Terraform Format Check') {
             steps {
-                dir('.') {
-                    sh 'terraform fmt -check'
+                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                    dir('.') {
+                        sh 'terraform fmt -check'
+                    }
                 }
             }
         }
@@ -34,8 +36,10 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir('.') {
-                        sh 'terraform init'
+                    wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                        dir('.') {
+                            sh 'terraform init'
+                        }
                     }
                 }
             }
@@ -44,8 +48,10 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir('.') {
-                        sh 'terraform validate'
+                    wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                        dir('.') {
+                            sh 'terraform validate'
+                        }
                     }
                 }
             }
@@ -54,8 +60,10 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir('.') {
-                        sh 'terraform plan -out=tfplan'
+                    wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                        dir('.') {
+                            sh 'terraform plan -out=tfplan'
+                        }
                     }
                 }
             }
@@ -64,9 +72,11 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir('.') {
-                        input message: 'Do you want to apply the changes?', ok: 'Apply Now'
-                        sh 'terraform apply tfplan'
+                    wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                        dir('.') {
+                            input message: 'Do you want to apply the changes?', ok: 'Apply Now'
+                            sh 'terraform apply tfplan'
+                        }
                     }
                 }
             }
