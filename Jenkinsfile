@@ -19,17 +19,18 @@ pipeline {
         stage('Install Terraform') {
             steps {
                 script {
-                       apt-get update
-                       apt-get install -y 
                     // Check if Terraform is installed, if not, install it
                     def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
                     if (terraformInstalled != 0) {
                         echo 'Terraform is not installed, installing it now.'
-                        // Install Terraform (Assuming Ubuntu or Debian based system)
-                        sh 'curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -'
-                        sh 'sudo apt-add-repository "deb https://apt.releases.hashicorp.com $(lsb_release -cs) main"'
-                        sh 'sudo apt-get update'
-                        sh 'sudo apt-get install terraform'
+                        // Install Terraform manually (no sudo)
+                        sh '''
+                            TERRAFORM_VERSION="1.5.0"
+                            curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
+                            unzip terraform.zip
+                            mv terraform /usr/local/bin/terraform
+                            terraform -version
+                        '''
                     } else {
                         echo 'Terraform is already installed.'
                     }
