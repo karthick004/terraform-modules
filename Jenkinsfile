@@ -6,6 +6,8 @@ pipeline {
         TF_VAR_region = 'us-east-1'
         TF_DIR = 'eks_cluster'
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
+        LOCAL_BIN = "${WORKSPACE}/.local/bin"
+        PATH = "${WORKSPACE}/.local/bin:${env.PATH}"
     }
 
     triggers {
@@ -13,24 +15,31 @@ pipeline {
     }
 
     stages {
+
+        stage('Clean Workspace') {
+            steps {
+                deleteDir()
+            }
+        }
+
         stage('Install Terraform') {
             steps {
                 script {
-                    def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
+                    def terraformInstalled = sh(script: "${LOCAL_BIN}/terraform -version", returnStatus: true)
                     if (terraformInstalled != 0) {
                         echo 'Terraform is not installed, installing it now.'
-                        sh '''
+                        sh """
                             TERRAFORM_VERSION="1.5.0"
-                            mkdir -p $HOME/.local/bin
-                            curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
+                            mkdir -p ${LOCAL_BIN}
+                            curl -fsSL https://releases.hashicorp.com/terraform/\${TERRAFORM_VERSION}/terraform_\${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
                             unzip terraform.zip
-                            mv terraform $HOME/.local/bin/terraform
-                            export PATH=$HOME/.local/bin:$PATH
-                            terraform -version
-                        '''
+                            mv terraform ${LOCAL_BIN}/terraform
+                            rm terraform.zip
+                        """
                     } else {
                         echo 'Terraform is already installed.'
                     }
+                    sh "${LOCAL_BIN}/terraform -version"
                 }
             }
         }
@@ -39,6 +48,7 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
                     sh '''
+                        rm -rf terraformmodules
                         git config --global credential.helper store
                         git clone -b submain1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                     '''
@@ -48,10 +58,12 @@ pipeline {
 
         stage('Restore Cache') {
             steps {
-                sh "mkdir -p ${TF_CACHE_DIR}"
-                sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi"
-                sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi"
-                sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi"
+                sh """
+                    mkdir -p ${TF_CACHE_DIR}
+                    if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi
+                    if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi
+                    if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi
+                """
             }
         }
 
@@ -96,10 +108,12 @@ pipeline {
 
         stage('Save Cache') {
             steps {
-                sh "mkdir -p ${TF_CACHE_DIR}"
-                sh "cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true"
-                sh "cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true"
-                sh "cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
+                sh """
+                    mkdir -p ${TF_CACHE_DIR}
+                    cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true
+                    cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true
+                    cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true
+                """
             }
         }
     }
