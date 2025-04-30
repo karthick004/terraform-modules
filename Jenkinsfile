@@ -42,7 +42,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/karthick004/cluster-module.git'
+                git branch: 'main', url: 'https://github.com/CloudMasa-Tech/terraformmodules.git'
             }
         }
 
