@@ -4,7 +4,6 @@ pipeline {
     environment {
         AWS_REGION = 'us-east-1'
         TF_VAR_region = 'us-east-1'
-        TF_DIR = 'eks_cluster'
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
         LOCAL_BIN = "${WORKSPACE}/.local/bin"
         PATH = "${WORKSPACE}/.local/bin:${env.PATH}"
@@ -60,23 +59,23 @@ pipeline {
             steps {
                 sh """
                     mkdir -p ${TF_CACHE_DIR}
-                    if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi
-                    if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi
-                    if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi
+                    if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform terraformmodules/; fi
+                    if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate terraformmodules/; fi
+                    if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d terraformmodules/; fi
                 """
             }
         }
 
         stage('Terraform Format') {
             steps {
-                sh "cd ${TF_DIR} && terraform fmt -recursive"
+                sh "cd terraformmodules && terraform fmt -recursive"
             }
         }
 
         stage('Terraform Init') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh "cd ${TF_DIR} && terraform init"
+                    sh "cd terraformmodules && terraform init"
                 }
             }
         }
@@ -84,7 +83,7 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh "cd ${TF_DIR} && terraform validate"
+                    sh "cd terraformmodules && terraform validate"
                 }
             }
         }
@@ -92,7 +91,7 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh "cd ${TF_DIR} && terraform plan -out=tfplan"
+                    sh "cd terraformmodules && terraform plan -out=tfplan"
                 }
             }
         }
@@ -101,7 +100,7 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     input message: 'Do you want to apply the changes?', ok: 'Apply Now'
-                    sh "cd ${TF_DIR} && terraform apply tfplan"
+                    sh "cd terraformmodules && terraform apply tfplan"
                 }
             }
         }
@@ -110,9 +109,9 @@ pipeline {
             steps {
                 sh """
                     mkdir -p ${TF_CACHE_DIR}
-                    cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true
-                    cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true
-                    cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true
+                    cp -R terraformmodules/.terraform ${TF_CACHE_DIR}/ || true
+                    cp terraformmodules/terraform.tfstate ${TF_CACHE_DIR}/ || true
+                    cp -R terraformmodules/terraform.tfstate.d ${TF_CACHE_DIR}/ || true
                 """
             }
         }
