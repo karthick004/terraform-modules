@@ -2,19 +2,19 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-2'
-        TF_VAR_region = 'us-east-2'
+        AWS_REGION = 'us-east-1'
+        TF_VAR_region = 'us-east-1'
+        TF_DIR = 'eks_cluster'
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
-        KUBECONFIG = "${WORKSPACE}/.kube/config"
+    }
+
+    triggers {
+        githubPush()
     }
 
     options {
         timestamps()
         ansiColor('xterm')
-    }
-
-    triggers {
-        githubPush()
     }
 
     stages {
@@ -23,7 +23,7 @@ pipeline {
                 script {
                     def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
                     if (terraformInstalled != 0) {
-                        echo 'Installing Terraform...'
+                        echo 'Terraform is not installed, installing it now.'
                         sh '''
                             TERRAFORM_VERSION="1.5.0"
                             mkdir -p $HOME/.local/bin
@@ -46,73 +46,74 @@ pipeline {
             }
         }
 
-        stage('Restore Terraform Cache') {
+        stage('Restore Cache') {
             steps {
-                sh "mkdir -p ${TF_CACHE_DIR}"
-                sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform eks_cluster/; fi"
-                sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate eks_cluster/; fi"
-                sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d eks_cluster/; fi"
-            }
-        }
-
-        stage('Init & Apply EKS Cluster') {
-            steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh '''
-                        cd eks_cluster
-                        terraform init
-                        terraform fmt -recursive
-                        terraform validate
-                        terraform plan -out=tfplan
-                        terraform apply -auto-approve tfplan
-                    '''
+                script {
+                    sh "mkdir -p ${TF_CACHE_DIR}"
+                    sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi"
+                    sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi"
+                    sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi"
                 }
             }
         }
 
-        stage('Generate kubeconfig') {
+        stage('Terraform Format') {
+            steps {
+                sh "cd ${TF_DIR} && terraform fmt -recursive"
+            }
+        }
+
+        stage('Terraform Init') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh '''
-                        mkdir -p ~/.kube
-                        CLUSTER_NAME=$(terraform -chdir=eks_cluster output -raw cluster_name)
-                        aws eks update-kubeconfig --name $CLUSTER_NAME --region ${AWS_REGION} --kubeconfig ${KUBECONFIG}
-                        echo "✅ kubeconfig created at ${KUBECONFIG}"
-                    '''
+                    sh "cd ${TF_DIR} && terraform init"
                 }
             }
         }
 
-        stage('Apply Post Cluster Resources') {
+        stage('Terraform Validate') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh '''
-                        cd post_cluster
-                        terraform init
-                        terraform fmt -recursive
-                        terraform validate
-                        terraform apply -auto-approve
-                    '''
+                    sh "cd ${TF_DIR} && terraform validate"
                 }
             }
         }
 
-        stage('Save Terraform Cache') {
+        stage('Terraform Plan') {
             steps {
-                sh "mkdir -p ${TF_CACHE_DIR}"
-                sh "cp -R eks_cluster/.terraform ${TF_CACHE_DIR}/ || true"
-                sh "cp eks_cluster/terraform.tfstate ${TF_CACHE_DIR}/ || true"
-                sh "cp -R eks_cluster/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh "cd ${TF_DIR} && terraform plan -out=tfplan"
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    input message: 'Do you want to apply the changes?', ok: 'Apply Now'
+                    sh "cd ${TF_DIR} && terraform apply tfplan"
+                }
+            }
+        }
+
+        stage('Save Cache') {
+            steps {
+                script {
+                    sh "mkdir -p ${TF_CACHE_DIR}"
+                    sh "cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true"
+                    sh "cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true"
+                    sh "cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ Full EKS infrastructure deployment succeeded!"
+            echo "✅ Terraform deployment successful!"
         }
         failure {
-            echo "❌ Deployment failed. Check logs above."
+            echo "❌ Terraform deployment failed!"
         }
     }
 }
