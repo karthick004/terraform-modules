@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-2'
-        TF_VAR_region = 'us-east-2'
+        AWS_REGION = 'us-east-1'
+        TF_VAR_region = 'us-east-1'
         TF_DIR = 'eks_cluster'
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
     }
@@ -45,7 +45,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
                     sh '''
                         git config --global credential.helper store
-                        git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                        git clone -b master https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                     '''
                 }
             }
@@ -53,12 +53,10 @@ pipeline {
 
         stage('Restore Cache') {
             steps {
-                script {
-                    sh "mkdir -p ${TF_CACHE_DIR}"
-                    sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi"
-                    sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi"
-                    sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi"
-                }
+                sh "mkdir -p ${TF_CACHE_DIR}"
+                sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi"
+                sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi"
+                sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi"
             }
         }
 
@@ -103,12 +101,10 @@ pipeline {
 
         stage('Save Cache') {
             steps {
-                script {
-                    sh "mkdir -p ${TF_CACHE_DIR}"
-                    sh "cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true"
-                    sh "cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true"
-                    sh "cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
-                }
+                sh "mkdir -p ${TF_CACHE_DIR}"
+                sh "cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true"
+                sh "cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true"
+                sh "cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
             }
         }
     }
