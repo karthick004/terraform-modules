@@ -6,6 +6,7 @@ pipeline {
         TF_VAR_region = 'us-east-2'
         TF_DIR = 'eks_cluster'
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
+        KUBECONFIG = "${WORKSPACE}/kubeconfig"
     }
 
     triggers {
@@ -18,18 +19,20 @@ pipeline {
     }
 
     stages {
+
         stage('Install Terraform') {
             steps {
                 script {
                     def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
                     if (terraformInstalled != 0) {
-                        echo 'Terraform is not installed, installing it now.'
+                        echo 'Terraform is not installed. Installing now...'
                         sh '''
                             TERRAFORM_VERSION="1.5.0"
                             mkdir -p $HOME/.local/bin
                             curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
                             unzip terraform.zip
                             mv terraform $HOME/.local/bin/terraform
+                            echo 'export PATH=$HOME/.local/bin:$PATH' >> $HOME/.bashrc
                             export PATH=$HOME/.local/bin:$PATH
                             terraform -version
                         '''
@@ -46,7 +49,7 @@ pipeline {
             }
         }
 
-        stage('Restore Cache') {
+        stage('Restore Terraform Cache') {
             steps {
                 script {
                     sh "mkdir -p ${TF_CACHE_DIR}"
@@ -96,7 +99,32 @@ pipeline {
             }
         }
 
-        stage('Save Cache') {
+        stage('Update Kubeconfig') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh '''
+                        echo "Updating kubeconfig after EKS cluster creation..."
+                        aws eks update-kubeconfig --region $AWS_REGION --name prod-eks --kubeconfig $KUBECONFIG
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Kubernetes Deployments') {
+            when {
+                expression { fileExists("${TF_DIR}/kubernetes.tf") }
+            }
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh '''
+                        cd ${TF_DIR}
+                        terraform apply -auto-approve
+                    '''
+                }
+            }
+        }
+
+        stage('Save Terraform Cache') {
             steps {
                 script {
                     sh "mkdir -p ${TF_CACHE_DIR}"
@@ -110,7 +138,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Terraform deployment successful!"
+            echo "✅ Terraform deployment completed successfully!"
         }
         failure {
             echo "❌ Terraform deployment failed!"
