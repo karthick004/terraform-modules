@@ -12,30 +12,24 @@ pipeline {
         githubPush()
     }
 
-    options {
-        timestamps()
-    }
-
     stages {
         stage('Install Terraform') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    script {
-                        def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
-                        if (terraformInstalled != 0) {
-                            echo 'Terraform is not installed, installing it now.'
-                            sh '''
-                                TERRAFORM_VERSION="1.5.0"
-                                mkdir -p $HOME/.local/bin
-                                curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
-                                unzip terraform.zip
-                                mv terraform $HOME/.local/bin/terraform
-                                export PATH=$HOME/.local/bin:$PATH
-                                terraform -version
-                            '''
-                        } else {
-                            echo 'Terraform is already installed.'
-                        }
+                script {
+                    def terraformInstalled = sh(script: 'terraform -version', returnStatus: true)
+                    if (terraformInstalled != 0) {
+                        echo 'Terraform is not installed, installing it now.'
+                        sh '''
+                            TERRAFORM_VERSION="1.5.0"
+                            mkdir -p $HOME/.local/bin
+                            curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
+                            unzip terraform.zip
+                            mv terraform $HOME/.local/bin/terraform
+                            export PATH=$HOME/.local/bin:$PATH
+                            terraform -version
+                        '''
+                    } else {
+                        echo 'Terraform is already installed.'
                     }
                 }
             }
@@ -43,89 +37,69 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-                        sh '''
-                            git config --global credential.helper store
-                            git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/karthick004/terraform-modules.git
-                        '''
-                    }
+                withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                    sh '''
+                        git config --global credential.helper store
+                        git clone -b submain1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                    '''
                 }
             }
         }
 
         stage('Restore Cache') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    script {
-                        sh "mkdir -p ${TF_CACHE_DIR}"
-                        sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi"
-                        sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi"
-                        sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi"
-                    }
-                }
+                sh "mkdir -p ${TF_CACHE_DIR}"
+                sh "if [ -d ${TF_CACHE_DIR}/.terraform ]; then cp -R ${TF_CACHE_DIR}/.terraform ${TF_DIR}/; fi"
+                sh "if [ -f ${TF_CACHE_DIR}/terraform.tfstate ]; then cp ${TF_CACHE_DIR}/terraform.tfstate ${TF_DIR}/; fi"
+                sh "if [ -d ${TF_CACHE_DIR}/terraform.tfstate.d ]; then cp -R ${TF_CACHE_DIR}/terraform.tfstate.d ${TF_DIR}/; fi"
             }
         }
 
         stage('Terraform Format') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    sh "cd ${TF_DIR} && terraform fmt -recursive"
-                }
+                sh "cd ${TF_DIR} && terraform fmt -recursive"
             }
         }
 
         stage('Terraform Init') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                        sh "cd ${TF_DIR} && terraform init"
-                    }
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh "cd ${TF_DIR} && terraform init"
                 }
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                        sh "cd ${TF_DIR} && terraform validate"
-                    }
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh "cd ${TF_DIR} && terraform validate"
                 }
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                        sh "cd ${TF_DIR} && terraform plan -out=tfplan"
-                    }
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh "cd ${TF_DIR} && terraform plan -out=tfplan"
                 }
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                        input message: 'Do you want to apply the changes?', ok: 'Apply Now'
-                        sh "cd ${TF_DIR} && terraform apply tfplan"
-                    }
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    input message: 'Do you want to apply the changes?', ok: 'Apply Now'
+                    sh "cd ${TF_DIR} && terraform apply tfplan"
                 }
             }
         }
 
         stage('Save Cache') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm']) {
-                    script {
-                        sh "mkdir -p ${TF_CACHE_DIR}"
-                        sh "cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true"
-                        sh "cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true"
-                        sh "cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
-                    }
-                }
+                sh "mkdir -p ${TF_CACHE_DIR}"
+                sh "cp -R ${TF_DIR}/.terraform ${TF_CACHE_DIR}/ || true"
+                sh "cp ${TF_DIR}/terraform.tfstate ${TF_CACHE_DIR}/ || true"
+                sh "cp -R ${TF_DIR}/terraform.tfstate.d ${TF_CACHE_DIR}/ || true"
             }
         }
     }
