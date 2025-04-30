@@ -64,16 +64,10 @@ pipeline {
             }
         }
 
-        stage('Terraform Format') {
-            steps {
-                sh "cd ${TF_DIR} && terraform fmt -recursive"
-            }
-        }
-
-        stage('Terraform Validate') {
+        stage('Terraform Format & Validate') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh "cd ${TF_DIR} && terraform validate"
+                    sh "cd ${TF_DIR} && terraform fmt -recursive && terraform validate"
                 }
             }
         }
@@ -89,7 +83,7 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    input message: 'Do you want to apply the changes?', ok: 'Apply Now'
+                    input message: 'Apply the infrastructure changes?', ok: 'Apply'
                     sh "cd ${TF_DIR} && terraform apply tfplan"
                 }
             }
@@ -98,13 +92,12 @@ pipeline {
         stage('Generate kubeconfig') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    script {
-                        sh '''
-                            mkdir -p ~/.kube
-                            CLUSTER_NAME=$(terraform -chdir=${TF_DIR} output -raw cluster_name)
-                            aws eks update-kubeconfig --name $CLUSTER_NAME --region ${AWS_REGION} --kubeconfig ${KUBECONFIG}
-                        '''
-                    }
+                    sh '''
+                        mkdir -p ~/.kube
+                        CLUSTER_NAME=$(terraform -chdir=${TF_DIR} output -raw cluster_name)
+                        aws eks update-kubeconfig --name $CLUSTER_NAME --region ${AWS_REGION} --kubeconfig ${KUBECONFIG}
+                        echo "KUBECONFIG generated at ${KUBECONFIG}"
+                    '''
                 }
             }
         }
