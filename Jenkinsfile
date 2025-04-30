@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
-        TF_VAR_region = 'us-east-1'
+        AWS_REGION = 'us-east-2'
+        TF_VAR_region = 'us-east-2'
         TF_DIR = 'eks_cluster'
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
     }
