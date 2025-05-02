@@ -9,10 +9,6 @@ pipeline {
         PATH = "${LOCAL_BIN}:${env.PATH}"
     }
 
-    triggers {
-        pollSCM('H/5 * * * *')  // Poll SCM every 5 minutes (adjust as needed)
-    }
-
     stages {
         stage('Clean Workspace') {
             steps {
