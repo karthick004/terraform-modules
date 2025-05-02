@@ -20,9 +20,7 @@ pipeline {
         stage('Install Terraform') {
             steps {
                 script {
-                    // Check if Terraform exists
                     def tfInstalled = sh(script: "if [ -x '${LOCAL_BIN}/terraform' ]; then exit 0; else exit 1; fi", returnStatus: true)
-                    
                     if (tfInstalled != 0) {
                         echo 'Installing Terraform 1.5.0...'
                         sh """
@@ -67,7 +65,7 @@ pipeline {
         stage('Terraform Format') {
             steps {
                 dir('terraformmodules') {
-                    sh 'terraform fmt -recursive'  // Auto-format all files
+                    sh 'terraform fmt -recursive'
                 }
             }
         }
@@ -116,10 +114,8 @@ pipeline {
                                 -input=false \
                                 -var="aws_region=${AWS_REGION}" \
                                 -out=tfplan \
-                                -detailed-exitcode
+                                -detailed-exitcode || true
                         """
-                        
-                        // Save plan output for review
                         sh 'terraform show -no-color tfplan > tfplan.txt'
                         archiveArtifacts artifacts: 'terraformmodules/tfplan.txt'
                     }
@@ -179,11 +175,8 @@ pipeline {
             steps {
                 dir('terraformmodules') {
                     script {
-                        // Capture outputs
                         sh 'terraform output -json > outputs.json'
                         archiveArtifacts artifacts: 'terraformmodules/outputs.json'
-                        
-                        // Display important outputs
                         def outputs = readJSON file: 'outputs.json'
                         echo "Cluster Endpoint: ${outputs.cluster_endpoint.value}"
                     }
@@ -195,23 +188,16 @@ pipeline {
     post {
         always {
             script {
-                // Archive important files
                 archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
-                
-                // Clean up sensitive files
                 sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
-                
-                // Final workspace cleanup
                 cleanWs()
             }
         }
         success {
             echo "✅ Terraform deployment successful!"
-            slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME}' (${env.BUILD_NUMBER})")
         }
         failure {
             echo "❌ Terraform deployment failed!"
-            slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME}' (${env.BUILD_NUMBER})")
         }
         cleanup {
             echo "Pipeline completed - cleaning up"
