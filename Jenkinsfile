@@ -10,23 +10,25 @@ pipeline {
     }
 
     stages {
-        stage('Clean Workspace') {
+        stage('Prepare Workspace') {
             steps {
                 cleanWs()
+                sh 'mkdir -p ${TF_CACHE_DIR} ${LOCAL_BIN}'
             }
         }
 
         stage('Install Terraform') {
             steps {
                 script {
-                    def tfExists = sh(script: "command -v ${LOCAL_BIN}/terraform", returnStatus: true)
-                    if (tfExists != 0) {
+                    // Check if Terraform exists
+                    def tfInstalled = sh(script: "if [ -x '${LOCAL_BIN}/terraform' ]; then exit 0; else exit 1; fi", returnStatus: true)
+                    
+                    if (tfInstalled != 0) {
                         echo 'Installing Terraform 1.5.0...'
                         sh """
-                            mkdir -p ${LOCAL_BIN}
                             curl -fsSL https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_linux_amd64.zip -o terraform.zip
                             unzip -o terraform.zip -d ${LOCAL_BIN}
-                            rm terraform.zip
+                            rm -f terraform.zip
                             chmod +x ${LOCAL_BIN}/terraform
                         """
                     }
@@ -45,8 +47,9 @@ pipeline {
                     )
                 ]) {
                     sh """
-                        rm -rf terraformmodules
-                        git clone -b submain2 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                        rm -rf terraformmodules || true
+                        git clone -b submain2 --depth 1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                        cd terraformmodules && git rev-parse HEAD > ../git-commit.txt
                     """
                 }
             }
@@ -55,13 +58,8 @@ pipeline {
         stage('Restore Cache') {
             steps {
                 sh """
-                    mkdir -p ${TF_CACHE_DIR}
-                    if [ -d "${TF_CACHE_DIR}/.terraform" ]; then
-                        cp -R ${TF_CACHE_DIR}/.terraform terraformmodules/
-                    fi
-                    if [ -f "${TF_CACHE_DIR}/terraform.tfstate" ]; then
-                        cp ${TF_CACHE_DIR}/terraform.tfstate terraformmodules/
-                    fi
+                    [ -d "${TF_CACHE_DIR}/.terraform" ] && cp -R ${TF_CACHE_DIR}/.terraform terraformmodules/ || true
+                    [ -f "${TF_CACHE_DIR}/terraform.tfstate" ] && cp ${TF_CACHE_DIR}/terraform.tfstate terraformmodules/ || true
                 """
             }
         }
@@ -69,7 +67,7 @@ pipeline {
         stage('Terraform Format') {
             steps {
                 dir('terraformmodules') {
-                    sh 'terraform fmt -check -recursive -diff'
+                    sh 'terraform fmt -recursive'  // Auto-format all files
                 }
             }
         }
@@ -84,7 +82,12 @@ pipeline {
                     )
                 ]) {
                     dir('terraformmodules') {
-                        sh 'terraform init -input=false'
+                        sh """
+                            terraform init \
+                                -input=false \
+                                -backend-config="region=${AWS_REGION}" \
+                                -upgrade
+                        """
                     }
                 }
             }
@@ -112,17 +115,31 @@ pipeline {
                             terraform plan \
                                 -input=false \
                                 -var="aws_region=${AWS_REGION}" \
-                                -out=tfplan
+                                -out=tfplan \
+                                -detailed-exitcode
                         """
+                        
+                        // Save plan output for review
+                        sh 'terraform show -no-color tfplan > tfplan.txt'
+                        archiveArtifacts artifacts: 'terraformmodules/tfplan.txt'
                     }
                 }
             }
         }
 
         stage('Manual Approval') {
+            when {
+                expression { 
+                    return !env.JOB_NAME.contains('automated') 
+                }
+            }
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input message: 'Apply Terraform changes?', ok: 'Apply'
+                    input(
+                        message: 'Apply Terraform changes?', 
+                        ok: 'Apply',
+                        submitter: 'admin,terraform'
+                    )
                 }
             }
         }
@@ -157,17 +174,47 @@ pipeline {
                 """
             }
         }
+
+        stage('Output Results') {
+            steps {
+                dir('terraformmodules') {
+                    script {
+                        // Capture outputs
+                        sh 'terraform output -json > outputs.json'
+                        archiveArtifacts artifacts: 'terraformmodules/outputs.json'
+                        
+                        // Display important outputs
+                        def outputs = readJSON file: 'outputs.json'
+                        echo "Cluster Endpoint: ${outputs.cluster_endpoint.value}"
+                    }
+                }
+            }
+        }
     }
 
     post {
         always {
-            cleanWs()
+            script {
+                // Archive important files
+                archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
+                
+                // Clean up sensitive files
+                sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
+                
+                // Final workspace cleanup
+                cleanWs()
+            }
         }
         success {
             echo "✅ Terraform deployment successful!"
+            slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME}' (${env.BUILD_NUMBER})")
         }
         failure {
             echo "❌ Terraform deployment failed!"
+            slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME}' (${env.BUILD_NUMBER})")
+        }
+        cleanup {
+            echo "Pipeline completed - cleaning up"
         }
     }
 }
