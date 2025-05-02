@@ -8,6 +8,10 @@ pipeline {
         LOCAL_BIN = "${WORKSPACE}/.local/bin"
         PATH = "${LOCAL_BIN}:${env.PATH}"
     }
+    
+       parameters {
+        string(name: 'TF_STATE_KEY', defaultValue: 'environments/dev/eks/terraform.tfstate', description: 'Terraform state file key')
+    }
 
     stages {
         stage('Prepare Workspace') {
