@@ -46,7 +46,7 @@ pipeline {
                 ]) {
                     sh """
                         rm -rf terraformmodules
-                        git clone -b submain1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                        git clone -b submain2 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                     """
                 }
             }
