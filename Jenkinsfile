@@ -83,7 +83,10 @@ pipeline {
                         sh """
                             terraform init \
                                 -input=false \
+                                -backend-config="bucket=my-tf-state-bucket" \
+                                -backend-config="key=environments/dev/eks/terraform.tfstate" \
                                 -backend-config="region=${AWS_REGION}" \
+                                -backend-config="dynamodb_table=my-tf-lock-table" \
                                 -upgrade
                         """
                     }
@@ -117,7 +120,7 @@ pipeline {
                                 -detailed-exitcode || true
                         """
                         sh 'terraform show -no-color tfplan > tfplan.txt'
-                        archiveArtifacts artifacts: 'terraformmodules/tfplan.txt'
+                        archiveArtifacts artifacts: 'tfplan.txt'
                     }
                 }
             }
@@ -125,17 +128,11 @@ pipeline {
 
         stage('Manual Approval') {
             when {
-                expression { 
-                    return !env.JOB_NAME.contains('automated') 
-                }
+                expression { !env.JOB_NAME.contains('automated') }
             }
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input(
-                        message: 'Apply Terraform changes?', 
-                        ok: 'Apply',
-                        submitter: 'admin,terraform'
-                    )
+                    input(message: 'Apply Terraform changes?', ok: 'Apply', submitter: 'admin,terraform')
                 }
             }
         }
@@ -153,8 +150,7 @@ pipeline {
                         sh """
                             terraform apply \
                                 -input=false \
-                                -auto-approve \
-                                tfplan
+                                -auto-approve tfplan
                         """
                     }
                 }
@@ -176,7 +172,7 @@ pipeline {
                 dir('terraformmodules') {
                     script {
                         sh 'terraform output -json > outputs.json'
-                        archiveArtifacts artifacts: 'terraformmodules/outputs.json'
+                        archiveArtifacts artifacts: 'outputs.json'
                         def outputs = readJSON file: 'outputs.json'
                         echo "Cluster Endpoint: ${outputs.cluster_endpoint.value}"
                     }
