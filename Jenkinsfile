@@ -19,10 +19,7 @@ pipeline {
         stage('Install Terraform') {
             steps {
                 script {
-                    def tfExists = sh(
-                        script: "command -v ${LOCAL_BIN}/terraform",
-                        returnStatus: true
-                    )
+                    def tfExists = sh(script: "command -v ${LOCAL_BIN}/terraform", returnStatus: true)
                     if (tfExists != 0) {
                         echo 'Installing Terraform 1.5.0...'
                         sh """
@@ -49,8 +46,7 @@ pipeline {
                 ]) {
                     sh """
                         rm -rf terraformmodules
-                        git clone -b submain1 \
-                            https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                        git clone -b submain1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                     """
                 }
             }
@@ -60,18 +56,21 @@ pipeline {
             steps {
                 sh """
                     mkdir -p ${TF_CACHE_DIR}
-                    [ -d "${TF_CACHE_DIR}/.terraform" ] && cp -R "${TF_CACHE_DIR}/.terraform" terraformmodules/
-                    [ -f "${TF_CACHE_DIR}/terraform.tfstate" ] && cp "${TF_CACHE_DIR}/terraform.tfstate" terraformmodules/
+                    if [ -d "${TF_CACHE_DIR}/.terraform" ]; then
+                        cp -R ${TF_CACHE_DIR}/.terraform terraformmodules/
+                    fi
+                    if [ -f "${TF_CACHE_DIR}/terraform.tfstate" ]; then
+                        cp ${TF_CACHE_DIR}/terraform.tfstate terraformmodules/
+                    fi
                 """
             }
         }
 
         stage('Terraform Format') {
             steps {
-                sh """
-                    cd terraformmodules
-                    terraform fmt -check -recursive -diff
-                """
+                dir('terraformmodules') {
+                    sh 'terraform fmt -check -recursive -diff'
+                }
             }
         }
 
@@ -84,20 +83,18 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     )
                 ]) {
-                    sh """
-                        cd terraformmodules
-                        terraform init -input=false
-                    """
+                    dir('terraformmodules') {
+                        sh 'terraform init -input=false'
+                    }
                 }
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                sh """
-                    cd terraformmodules
-                    terraform validate
-                """
+                dir('terraformmodules') {
+                    sh 'terraform validate'
+                }
             }
         }
 
@@ -110,13 +107,14 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     )
                 ]) {
-                    sh """
-                        cd terraformmodules
-                        terraform plan \
-                            -input=false \
-                            -var="aws_region=${AWS_REGION}" \
-                            -out=tfplan
-                    """
+                    dir('terraformmodules') {
+                        sh """
+                            terraform plan \
+                                -input=false \
+                                -var="aws_region=${AWS_REGION}" \
+                                -out=tfplan
+                        """
+                    }
                 }
             }
         }
@@ -124,10 +122,7 @@ pipeline {
         stage('Manual Approval') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input(
-                        message: 'Apply Terraform changes?',
-                        ok: 'Apply'
-                    )
+                    input message: 'Apply Terraform changes?', ok: 'Apply'
                 }
             }
         }
@@ -141,13 +136,14 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     )
                 ]) {
-                    sh """
-                        cd terraformmodules
-                        terraform apply \
-                            -input=false \
-                            -auto-approve \
-                            tfplan
-                    """
+                    dir('terraformmodules') {
+                        sh """
+                            terraform apply \
+                                -input=false \
+                                -auto-approve \
+                                tfplan
+                        """
+                    }
                 }
             }
         }
