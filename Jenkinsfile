@@ -157,16 +157,6 @@ pipeline {
             }
         }
 
-        stage('Save Cache') {
-            steps {
-                sh """
-                    mkdir -p ${TF_CACHE_DIR}
-                    cp -R terraformmodules/.terraform ${TF_CACHE_DIR}/ || true
-                    cp terraformmodules/terraform.tfstate ${TF_CACHE_DIR}/ || true
-                """
-            }
-        }
-
         stage('Output Results') {
             steps {
                 dir('terraformmodules') {
@@ -184,6 +174,12 @@ pipeline {
     post {
         always {
             script {
+                echo "🔁 Saving Terraform cache state..."
+                sh """
+                    mkdir -p ${TF_CACHE_DIR}
+                    cp -R terraformmodules/.terraform ${TF_CACHE_DIR}/ || true
+                    cp terraformmodules/terraform.tfstate ${TF_CACHE_DIR}/ || true
+                """
                 archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
                 sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
                 cleanWs()
@@ -196,7 +192,7 @@ pipeline {
             echo "❌ Terraform deployment failed!"
         }
         cleanup {
-            echo "Pipeline completed - cleaning up"
+            echo "🧹 Pipeline completed - cleaning up"
         }
     }
 }
