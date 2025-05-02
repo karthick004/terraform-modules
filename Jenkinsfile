@@ -8,8 +8,8 @@ pipeline {
         LOCAL_BIN = "${WORKSPACE}/.local/bin"
         PATH = "${LOCAL_BIN}:${env.PATH}"
     }
-    
-       parameters {
+
+    parameters {
         string(name: 'TF_STATE_KEY', defaultValue: 'environments/dev/eks/terraform.tfstate', description: 'Terraform state file key')
     }
 
@@ -88,7 +88,7 @@ pipeline {
                             terraform init \
                                 -input=false \
                                 -backend-config="bucket=my-tf-state-bucket" \
-                                -backend-config="key=environments/dev/eks/terraform.tfstate" \
+                                -backend-config="key=${params.TF_STATE_KEY}" \
                                 -backend-config="region=${AWS_REGION}" \
                                 -backend-config="dynamodb_table=my-tf-lock-table" \
                                 -upgrade
@@ -186,7 +186,7 @@ pipeline {
                 """
                 archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
                 sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
-                cleanWs()
+                // cleanWs() <--- Removed to preserve workspace
             }
         }
         success {
