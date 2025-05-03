@@ -126,13 +126,6 @@ pipeline {
     }
 
     post {
-        always {
-            script {
-                echo "🔁 Finalizing..."
-                archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
-                sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
-            }
-        }
         success {
             echo "✅ Terraform deployment successful!"
         }
