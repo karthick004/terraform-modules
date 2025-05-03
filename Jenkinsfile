@@ -8,10 +8,6 @@ pipeline {
         PATH = "${LOCAL_BIN}:${env.PATH}"
     }
 
-    parameters {
-        string(name: 'TF_STATE_KEY', defaultValue: 'environments/dev/eks/terraform.tfstate', description: 'Terraform state file key')
-    }
-
     stages {
         stage('Prepare Workspace') {
             steps {
@@ -62,15 +58,7 @@ pipeline {
             steps {
                 withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     dir('terraformmodules') {
-                        sh """
-                            terraform init \
-                                -input=false \
-                                -backend-config="bucket=my-tf-state-bucket" \
-                                -backend-config="key=${params.TF_STATE_KEY}" \
-                                -backend-config="region=${AWS_REGION}" \
-                                -backend-config="dynamodb_table=my-tf-lock-table" \
-                                -upgrade
-                        """
+                        sh 'terraform init -input=false -upgrade'
                     }
                 }
             }
