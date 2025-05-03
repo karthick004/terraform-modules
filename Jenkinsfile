@@ -81,7 +81,6 @@ pipeline {
                                 script: """
                                     terraform plan \
                                         -input=false \
-                                        -var="aws_region=${AWS_REGION}" \
                                         -out=tfplan
                                 """,
                                 returnStatus: true
