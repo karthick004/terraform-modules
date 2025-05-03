@@ -39,7 +39,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
                     sh """
                         rm -rf terraformmodules || true
-                        git clone -b submain1 --depth 1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
+                        git clone -b submain2 --depth 1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                         cd terraformmodules && git rev-parse HEAD > ../git-commit.txt
                     """
                 }
