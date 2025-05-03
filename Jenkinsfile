@@ -4,10 +4,8 @@ pipeline {
     environment {
         AWS_REGION = 'us-east-1'
         TF_VAR_aws_region = "${AWS_REGION}"
-        TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
         LOCAL_BIN = "${WORKSPACE}/.local/bin"
         PATH = "${LOCAL_BIN}:${env.PATH}"
-        CACHE_BUCKET = 'my-tf-plugin-cache-bucket'
     }
 
     parameters {
@@ -18,7 +16,7 @@ pipeline {
         stage('Prepare Workspace') {
             steps {
                 cleanWs()
-                sh 'mkdir -p ${TF_CACHE_DIR} ${LOCAL_BIN}'
+                sh 'mkdir -p ${LOCAL_BIN}'
             }
         }
 
@@ -48,19 +46,6 @@ pipeline {
                         git clone -b submain1 --depth 1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                         cd terraformmodules && git rev-parse HEAD > ../git-commit.txt
                     """
-                }
-            }
-        }
-
-        stage('Download Terraform Cache from S3') {
-            steps {
-                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                    dir('terraformmodules') {
-                        sh """
-                            CACHE_PATH="cache/${params.TF_STATE_KEY}"
-                            aws s3 cp s3://${CACHE_BUCKET}/\${CACHE_PATH}/.terraform .terraform --recursive || true
-                        """
-                    }
                 }
             }
         }
@@ -146,19 +131,6 @@ pipeline {
                         archiveArtifacts artifacts: 'outputs.json'
                         def outputs = readJSON file: 'outputs.json'
                         echo "Cluster Endpoint: ${outputs.cluster_endpoint.value}"
-                    }
-                }
-            }
-        }
-
-        stage('Upload Terraform Cache to S3') {
-            steps {
-                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                    dir('terraformmodules') {
-                        sh """
-                            CACHE_PATH="cache/${params.TF_STATE_KEY}"
-                            aws s3 cp .terraform s3://${CACHE_BUCKET}/\${CACHE_PATH}/.terraform --recursive || true
-                        """
                     }
                 }
             }
