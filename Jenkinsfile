@@ -130,19 +130,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Terraform Output') {
-            steps {
-                dir('terraformmodules') {
-                    script {
-                        sh 'terraform output -json > outputs.json'
-                        archiveArtifacts artifacts: 'outputs.json'
-                        def outputs = readJSON file: 'outputs.json'
-                        echo "Cluster Endpoint: ${outputs.cluster_endpoint?.value}"
-                    }
-                }
-            }
-        }
     }
 
     post {
