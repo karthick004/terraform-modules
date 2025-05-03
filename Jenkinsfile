@@ -5,7 +5,9 @@ pipeline {
         AWS_REGION = 'us-east-1'
         TF_VAR_aws_region = "${AWS_REGION}"
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
+        PLUGIN_CACHE_DIR = "${TF_CACHE_DIR}/plugin-cache"
         LOCAL_BIN = "${WORKSPACE}/.local/bin"
+        HOME = "${WORKSPACE}" // Terraform uses $HOME for .terraformrc
         PATH = "${LOCAL_BIN}:${env.PATH}"
     }
 
@@ -17,7 +19,15 @@ pipeline {
         stage('Prepare Workspace') {
             steps {
                 cleanWs()
-                sh 'mkdir -p ${TF_CACHE_DIR} ${LOCAL_BIN}'
+                sh 'mkdir -p ${TF_CACHE_DIR} ${PLUGIN_CACHE_DIR} ${LOCAL_BIN}'
+            }
+        }
+
+        stage('Write .terraformrc') {
+            steps {
+                writeFile file: '.terraformrc', text: """
+                    plugin_cache_dir = "${PLUGIN_CACHE_DIR}"
+                """.stripIndent()
             }
         }
 
@@ -54,15 +64,6 @@ pipeline {
                         cd terraformmodules && git rev-parse HEAD > ../git-commit.txt
                     """
                 }
-            }
-        }
-
-        stage('Restore Cache') {
-            steps {
-                sh """
-                    [ -d "${TF_CACHE_DIR}/.terraform" ] && cp -R ${TF_CACHE_DIR}/.terraform terraformmodules/ || true
-                    [ -f "${TF_CACHE_DIR}/terraform.tfstate" ] && cp ${TF_CACHE_DIR}/terraform.tfstate terraformmodules/ || true
-                """
             }
         }
 
@@ -178,7 +179,7 @@ pipeline {
     post {
         always {
             script {
-                echo "🔁 Saving Terraform cache state..."
+                echo "🔁 Saving Terraform plugin cache and workspace artifacts..."
                 sh """
                     mkdir -p ${TF_CACHE_DIR}
                     cp -R terraformmodules/.terraform ${TF_CACHE_DIR}/ || true
@@ -186,7 +187,6 @@ pipeline {
                 """
                 archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
                 sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
-                // cleanWs() <--- Removed to preserve workspace
             }
         }
         success {
