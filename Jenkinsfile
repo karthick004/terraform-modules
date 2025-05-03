@@ -5,10 +5,9 @@ pipeline {
         AWS_REGION = 'us-east-1'
         TF_VAR_aws_region = "${AWS_REGION}"
         TF_CACHE_DIR = "${WORKSPACE}/.tf_cache"
-        PLUGIN_CACHE_DIR = "${TF_CACHE_DIR}/plugin-cache"
         LOCAL_BIN = "${WORKSPACE}/.local/bin"
-        HOME = "${WORKSPACE}" // Terraform uses $HOME for .terraformrc
         PATH = "${LOCAL_BIN}:${env.PATH}"
+        CACHE_BUCKET = 'my-tf-plugin-cache-bucket'
     }
 
     parameters {
@@ -19,15 +18,7 @@ pipeline {
         stage('Prepare Workspace') {
             steps {
                 cleanWs()
-                sh 'mkdir -p ${TF_CACHE_DIR} ${PLUGIN_CACHE_DIR} ${LOCAL_BIN}'
-            }
-        }
-
-        stage('Write .terraformrc') {
-            steps {
-                writeFile file: '.terraformrc', text: """
-                    plugin_cache_dir = "${PLUGIN_CACHE_DIR}"
-                """.stripIndent()
+                sh 'mkdir -p ${TF_CACHE_DIR} ${LOCAL_BIN}'
             }
         }
 
@@ -51,18 +42,25 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'github-creds',
-                        usernameVariable: 'GIT_USERNAME',
-                        passwordVariable: 'GIT_PASSWORD'
-                    )
-                ]) {
+                withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
                     sh """
                         rm -rf terraformmodules || true
                         git clone -b submain1 --depth 1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                         cd terraformmodules && git rev-parse HEAD > ../git-commit.txt
                     """
+                }
+            }
+        }
+
+        stage('Download Terraform Cache from S3') {
+            steps {
+                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    dir('terraformmodules') {
+                        sh """
+                            CACHE_PATH="cache/${params.TF_STATE_KEY}"
+                            aws s3 cp s3://${CACHE_BUCKET}/\${CACHE_PATH}/.terraform .terraform --recursive || true
+                        """
+                    }
                 }
             }
         }
@@ -77,13 +75,7 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                withCredentials([
-                    aws(
-                        credentialsId: 'aws-creds',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
-                ]) {
+                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     dir('terraformmodules') {
                         sh """
                             terraform init \
@@ -109,13 +101,7 @@ pipeline {
 
         stage('Terraform Plan') {
             steps {
-                withCredentials([
-                    aws(
-                        credentialsId: 'aws-creds',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
-                ]) {
+                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     dir('terraformmodules') {
                         sh """
                             terraform plan \
@@ -144,25 +130,15 @@ pipeline {
 
         stage('Terraform Apply') {
             steps {
-                withCredentials([
-                    aws(
-                        credentialsId: 'aws-creds',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
-                ]) {
+                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     dir('terraformmodules') {
-                        sh """
-                            terraform apply \
-                                -input=false \
-                                -auto-approve tfplan
-                        """
+                        sh 'terraform apply -input=false -auto-approve tfplan'
                     }
                 }
             }
         }
 
-        stage('Output Results') {
+        stage('Terraform Output') {
             steps {
                 dir('terraformmodules') {
                     script {
@@ -174,17 +150,25 @@ pipeline {
                 }
             }
         }
+
+        stage('Upload Terraform Cache to S3') {
+            steps {
+                withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    dir('terraformmodules') {
+                        sh """
+                            CACHE_PATH="cache/${params.TF_STATE_KEY}"
+                            aws s3 cp .terraform s3://${CACHE_BUCKET}/\${CACHE_PATH}/.terraform --recursive || true
+                        """
+                    }
+                }
+            }
+        }
     }
 
     post {
         always {
             script {
-                echo "🔁 Saving Terraform plugin cache and workspace artifacts..."
-                sh """
-                    mkdir -p ${TF_CACHE_DIR}
-                    cp -R terraformmodules/.terraform ${TF_CACHE_DIR}/ || true
-                    cp terraformmodules/terraform.tfstate ${TF_CACHE_DIR}/ || true
-                """
+                echo "🔁 Finalizing..."
                 archiveArtifacts artifacts: 'terraformmodules/**/*.tf,git-commit.txt', allowEmptyArchive: true
                 sh 'rm -f terraformmodules/tfplan terraformmodules/tfplan.txt || true'
             }
