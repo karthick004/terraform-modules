@@ -19,7 +19,7 @@ pipeline {
         stage('Install Terraform') {
             steps {
                 script {
-                    def tfInstalled = sh(script: "if [ -x '${LOCAL_BIN}/terraform' ]; then exit 0; else exit 1; fi", returnStatus: true)
+                    def tfInstalled = sh(script: "[ -x '${LOCAL_BIN}/terraform' ]", returnStatus: true)
                     if (tfInstalled != 0) {
                         echo 'Installing Terraform 1.5.0...'
                         sh """
@@ -37,11 +37,11 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-                    sh """
+                    sh '''
                         rm -rf terraformmodules || true
                         git clone -b submain2 --depth 1 https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/CloudMasa-Tech/terraformmodules.git
                         cd terraformmodules && git rev-parse HEAD > ../git-commit.txt
-                    """
+                    '''
                 }
             }
         }
@@ -76,15 +76,22 @@ pipeline {
             steps {
                 withCredentials([aws(credentialsId: 'aws-creds', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     dir('terraformmodules') {
-                        sh """
-                            terraform plan \
-                                -input=false \
-                                -var="aws_region=${AWS_REGION}" \
-                                -out=tfplan \
-                                -detailed-exitcode || true
-                        """
-                        sh 'terraform show -no-color tfplan > tfplan.txt'
-                        archiveArtifacts artifacts: 'tfplan.txt'
+                        script {
+                            def status = sh(
+                                script: """
+                                    terraform plan \
+                                        -input=false \
+                                        -var="aws_region=${AWS_REGION}" \
+                                        -out=tfplan
+                                """,
+                                returnStatus: true
+                            )
+                            if (status != 0) {
+                                error("Terraform plan failed!")
+                            }
+                            sh 'terraform show -no-color tfplan > tfplan.txt'
+                            archiveArtifacts artifacts: 'tfplan.txt'
+                        }
                     }
                 }
             }
@@ -96,7 +103,7 @@ pipeline {
             }
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input(message: 'Apply Terraform changes?', ok: 'Apply', submitter: 'admin,terraform')
+                    input message: 'Apply Terraform changes?', ok: 'Apply', submitter: 'admin,terraform'
                 }
             }
         }
@@ -118,7 +125,7 @@ pipeline {
                         sh 'terraform output -json > outputs.json'
                         archiveArtifacts artifacts: 'outputs.json'
                         def outputs = readJSON file: 'outputs.json'
-                        echo "Cluster Endpoint: ${outputs.cluster_endpoint.value}"
+                        echo "Cluster Endpoint: ${outputs.cluster_endpoint?.value}"
                     }
                 }
             }
