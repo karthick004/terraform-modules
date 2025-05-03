@@ -22,12 +22,12 @@ pipeline {
                     def tfInstalled = sh(script: "[ -x '${LOCAL_BIN}/terraform' ]", returnStatus: true)
                     if (tfInstalled != 0) {
                         echo 'Installing Terraform 1.5.0...'
-                        sh '''
+                        sh """
                             curl -fsSL https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_linux_amd64.zip -o terraform.zip
                             unzip -o terraform.zip -d ${LOCAL_BIN}
                             rm -f terraform.zip
                             chmod +x ${LOCAL_BIN}/terraform
-                        '''
+                        """
                     }
                     sh "${LOCAL_BIN}/terraform -version"
                 }
@@ -37,16 +37,13 @@ pipeline {
         stage('Install kubectl') {
             steps {
                 script {
-                    def kubectlInstalled = sh(script: "[ -x '${LOCAL_BIN}/kubectl' ]", returnStatus: true)
-                    if (kubectlInstalled != 0) {
-                        echo 'Installing kubectl...'
-                        sh '''
-                            curl -LO "https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                            chmod +x kubectl
-                            mv kubectl ${LOCAL_BIN}/kubectl
-                        '''
-                    }
-                    sh "${LOCAL_BIN}/kubectl version --client"
+                    echo 'Installing kubectl...'
+                    sh """
+                        curl -LO https://dl.k8s.io/release/v1.26.1/bin/linux/amd64/kubectl
+                        chmod +x ./kubectl
+                        mv ./kubectl /usr/local/bin/kubectl
+                        kubectl version --client
+                    """
                 }
             }
         }
@@ -95,11 +92,11 @@ pipeline {
                     dir('terraformmodules') {
                         script {
                             def status = sh(
-                                script: '''
+                                script: """
                                     terraform plan \
                                         -input=false \
                                         -out=tfplan
-                                ''',
+                                """,
                                 returnStatus: true
                             )
                             if (status != 0) {
