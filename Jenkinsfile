@@ -34,15 +34,24 @@ pipeline {
             }
         }
 
-        stage('Install kubectl') {
+        stage('Install kubectl and Helm') {
             steps {
                 script {
-                    echo 'Installing kubectl...'
+                    echo 'Installing kubectl and Helm...'
                     sh """
+                        # Install kubectl
                         curl -LO https://dl.k8s.io/release/v1.26.1/bin/linux/amd64/kubectl
                         chmod +x ./kubectl
                         mv ./kubectl /usr/local/bin/kubectl
                         kubectl version --client
+
+                        # Install Helm
+                        curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz -o helm.tar.gz
+                        tar -zxvf helm.tar.gz
+                        mv linux-amd64/helm /usr/local/bin/helm
+                        chmod +x /usr/local/bin/helm
+                        helm version
+                        rm -rf helm.tar.gz linux-amd64
                     """
                 }
             }
